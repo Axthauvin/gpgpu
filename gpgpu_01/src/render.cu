@@ -21,7 +21,7 @@ struct rgba8_t {
   std::uint8_t a;
 };
 
-rgba8_t heat_lut(float x)
+__device__ rgba8_t heat_lut(float x)
 {
   assert(0 <= x && x <= 1);
   float x0 = 1.f / 4.f;
@@ -61,7 +61,7 @@ __device__ uchar4 palette(int x, int N)
 }
 
 // Device code
-__global__ void mykernel(char* buffer, int width, int height, size_t pitch, int N = 100)
+__global__ void mandelbrot(char* buffer, int width, int height, size_t pitch, int N = 100)
 {
   // float denum = width * width + height * height;
 
@@ -72,7 +72,7 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch, int 
     return;
 
 
-  uchar4* color = (uchar4*)(buffer + y * pitch);
+  rgba8_t* color = (rgba8_t*)(buffer + y * pitch);
   // float    v       = (x * x + y * y) / denum;
   // uint8_t  grayv   = v * 255;
 
@@ -100,7 +100,11 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch, int 
     i++;
   }
 
-  color[x] = palette(i, N);
+  // color[x] = palette(i, N);
+
+  float normalized = (float)i / N;
+
+  color[x] = heat_lut(normalized);
 }
 
 void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride, int n_iterations)
@@ -125,7 +129,7 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride, int 
 
     dim3 dimBlock(bsize, bsize);
     dim3 dimGrid(w, h);
-    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch, n_iterations);
+    mandelbrot<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch, n_iterations);
 
     if (cudaPeekAtLastError())
       abortError("Computation Error");
