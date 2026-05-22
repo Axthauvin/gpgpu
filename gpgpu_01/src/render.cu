@@ -54,10 +54,16 @@ rgba8_t heat_lut(float x)
   }
 }
 
-// Device code
-__global__ void mykernel(char* buffer, int width, int height, size_t pitch)
+__device__ uchar4 palette(int x, int N)
 {
-  float denum = width * width + height * height;
+  uint8_t v = 255 * x / N;
+  return {v,v,v,255};
+}
+
+// Device code
+__global__ void mykernel(char* buffer, int width, int height, size_t pitch, int N = 100)
+{
+  // float denum = width * width + height * height;
 
   int x = blockDim.x * blockIdx.x + threadIdx.x;
   int y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -65,11 +71,36 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch)
   if (x >= width || y >= height)
     return;
 
-  uchar4*  lineptr = (uchar4*)(buffer + y * pitch);
-  float    v       = (x * x + y * y) / denum;
-  uint8_t  grayv   = v * 255;
 
-  lineptr[x] = {grayv, grayv, grayv, 255};
+  uchar4* color = (uchar4*)(buffer + y * pitch);
+  // float    v       = (x * x + y * y) / denum;
+  // uint8_t  grayv   = v * 255;
+
+  // color[x] = {grayv, grayv, grayv, 255};
+
+  float XMIN = -2.5;
+  float XMAX = 1.0;
+  float YMIN = -1.0;
+  float YMAX = 1.0;
+
+  // mx0 = scaled px coordinate of pixel (scaled to lie in the Mandelbrot X scale (-2.5, 1))
+  float mx0 = (x * (XMAX - XMIN) / width + XMIN);
+  // my0 = scaled py coordinate of pixel (scaled to lie in the Mandelbrot Y scale (-1, 1))
+  float my0 = (y * (YMIN - YMAX) / height + YMAX);
+
+  float mx = 0.0;
+  float my = 0.0;
+
+  int i = 0;
+
+  while (mx*mx + my*my < 2*2  && i < N) {
+    float mxtemp = mx*mx - my*my + mx0;
+    my = 2*mx*my + my0;
+    mx = mxtemp;
+    i++;
+  }
+
+  color[x] = palette(i, N);
 }
 
 void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride, int n_iterations)
@@ -94,7 +125,7 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride, int 
 
     dim3 dimBlock(bsize, bsize);
     dim3 dimGrid(w, h);
-    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch);
+    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch, n_iterations);
 
     if (cudaPeekAtLastError())
       abortError("Computation Error");
