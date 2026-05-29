@@ -135,10 +135,12 @@ __global__ void compute_LUT(const char* buffer, int width, int height, size_t pi
   }
 
   for (int k = 0; k <= max_iter; k++) {
-    float div = static_cast<float>(histo[k]) / histo[max_iter];
+    float div = static_cast<float>(histo[k]) / histo[max_iter - 1];
 
     LUT_rgb[k] = heat_lut(div);
   }
+  
+  LUT_rgb[max_iter] = heat_lut(1.0f);
 
 }
 
